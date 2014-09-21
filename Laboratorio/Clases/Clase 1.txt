@@ -1,0 +1,68 @@
+Laboratorio de Bases de Datos
+Apuntes Clase 1:
+
+Servidor de BD:
+	* Instancia de la BD: Combinación del System Global Area (SGA), y proceso background de Oracle. Multiples instancias pueden ejecutarse concurrentemente en el mismo computador, cada uno accesando a su propia BD física.
+	* Base de Datos: cuando se inicia es asociada a una instancia (montar la base de datos). La BD puede ser abierta para ser usada por múltiples usuarios.
+
+Área Global del Sistema (SGA): Estructuras de memoria compartida que contienen información de datos y control para una instancia de una base de datos Oracle. Para un desempeño óptimo el SGA completo debe estar en memoria. Si no lo está y se utiliza la memoria virtual, el desempeño puede decrecer dramáticamente a causa de la paginación por parte del sistema operativo del SGA.
+
+	* Large Pool: área opcional que proporciona asignaciones grandes de memoria para ciertos procesos complejos, tales como: 
+		-Operaciones de respaldo y recuperación.
+		- Procesos I/O del servidor.
+	* Java Pool: Utilizada por las sesiones de código y datos de Java dentro de la máquina virtual de Java (JVM).
+	* Database buffer cache: mantiene una copia de los bloques leídos de los archivos de datos. Todos los procesos de los usuarios conectados concurrentemente a la instancia compartida lo acceden. La primera vez que un proceso usuario requiere una piza de datos, éste busca los datos en el buffer cache. Si el proceso los encuentra se tiene un cache hit. En caso contrario debe buscarlos en el archivo de datos y se tiene un cache miss.
+	* Shared Pool: Contiene las tres áreas mayores: library cache, dictionary cache y estructuras de control, compartidas por diversos usuarios.
+	* Redo Log Buffer: buffer circular que mantiene información acerca de los cambios hechos en la BD.Contiene la información necesaria para reconstruir o rehacer los cambios hecho en la base de datos por operaciones: INSERT, UPDATE, DELETE, CREATE, ALTER o DROP. Hace cache de información de redo (utilizada para recuperar la instancia) hasta que pueda ser escrita en archivos de redo log almacenados en disco.
+	-------
+	* Process Monitor (PMON): efectúa proceso de limpieza cuando un proceso de usuario falla. Limpia el buffer cache de la BD y libera recursos que estaba usando el proceso de usuario.
+	* System Monitor (SMON): efectúa recuperación, si es necesario, al iniciar una instancia. Limpia segementos temporales que no estén utilizándose.
+	* Server Process: trabaja  desde los archivos de datos hacia el Database buffer cache, maneja los requerimientos de procesos de usuarios conectados a la instancia:
+		- Análisis y ejecución de instrucciones SQL.
+		- Leer bloques de datos de datafiles en el disco.
+		- Devolver resultados para que la aplicación pueda procesar la información.
+	* Database Writer (DBWn): trabaja desde el Database buffer cache hacia archivos de datos, escribe el contenido de los buffers (sucios y fríos) a los datafiles en disco. Administra el buffer cache para que los procesos de usuario siempre encuentren buffers libres.
+	* Checkpoint: trabaja hacia los archivos de datos y los archivos de control, actualiza los headers de todos los datafiles para registrar los detalles de un checkpoint que ocurra. No escribe al disco (esto es siempre efectuado por el DBWn).
+	* Log Writer (LGWR): trabaja desde el Redo log buffer hacia los archivos de redo log, administra el redo log buffer (buffer circular), escribiendolo a los redo log file en disco. Escribe todas las entradas redo que han sido copiadas al buffer desde la última vez. Antes que el DBWm escriba un buffer modificado, todos los registros redo asociados a los cambios del buffer deben ser escritos al disco (the write-ahead protocol).
+	* Archiver (ARCn): trabaja desde los archivos de Redo log hacia los archivos de Archive log, copia los archivos de redo log a un dispositivo de almacenamiento después de ocurrir un log switch. Los procesos ARCn están presentes sólo cuando la BD está en modo ARCHIVELOG, y la archivación automática está habilitada.
+	-------------
+	* Archivos de Datos.
+	* Archivos de Control.
+	* Archivos de Redo log (online): permiten la recuperación de la instancia de la BD. Si la BD se cae (crash) y no se pierden data files, entonces la instancia puede recuperar la BD con la información de estos archivos. 
+	* Archivos de Archive log: contienen la historia continua de los cambios de los datos (redo) generados por la instancia. Utilizando un backup de la BD y estos archivos se puede recuperar un data file perdido.
+	--------------
+
+Área Global de Programas (PGA): asignada al iniciar el proceso servidor. Es privado para cada proceso servidor y proceso background; tiene stack areas y data areas.
+
+	* Private SQL Area: contiene datos como información vinculada y estructuras de memoria de ejecución. Cada sesión que fectúa una instrucción SQL tiene un área privada SQL. Cada usuario que envía la misma instrucción SQL tiene su propia área privada que utiliza un área simple compartida, por lo que diversas áreas privadas pueden ser asociadas con una misma área SQL compartida.
+		- Runtime.
+			SQL Work Areas: para consultas complejas una gran porción del área de ejecución es dedicada a áreas de trabajo asignadas por operadores de memoria intensiva tales como: operadores basaados en Sort, Hash-join, Bitmap merge o Bitmap create.
+		- Área Persistente: contiene información que debe ser mantenida durante muchas ejecuciones de la misma instrucción, por ejemplo, la información de contexto o conversiones de tipos de datos. Es liberado sólo cuando el cursor es cerrado. Debe tenerse cuidado cuando los cursores se manejan por la aplicación porque consumen recursos.
+		- Datos de la sesión de usuario.
+	* Información  de sesión.
+		- Datos de la sesión de usuario.
+-------------------------
+Buffers (Buffer Cache): cuando un buffer en el DB buffer cache es modificado, se marca como sucio. Un buffer frío es un buffer que no ha sido recientemente usado de acuerdo al algoritmo de menos recientemente usado (LRU). Se organizan dos listas:
+	* Write List: buffers sucios, datos modificados pero aún no escritos a disco.
+	* Lista LRU: buffer limpios, buffers "pinned" (accedidos en ese momento) y buffers sucios que aún no están en el write list.
+-------------------------
+Shared Pool: 
+	* Cache del Diccionario de Datos: es una colección de tablas y vistas de la base de datos que contienen información de referencia acerca de la base de datos, sus estructuras y usuario. Oracle accede a los datos del diccionario frecuentemente durante el análisis de una instrucción de SQL. El diccionario de datos es accedido en dos ubicaciones especiales en la memoria designada para éste. Un área es llamada data dictionary cache, también conocida como row cache porque mantiene los datos como tuplas en lugar de buffers (que son bloques de datos enteros). Otra área en memoria para mantener el diccionario es library cache.
+	* Biblioteca PL/SQL (Library Cache): Incluye las áreas de SQL compartidas y privadas en caso de que sea un servidor de múltiples transacciones. Los procedimientos PL/SQL y paquetes, estructuras de control como los locks y manejadores del cache de librarías.
+	* Biblioteca SQL (Areas SQL compartidas y privadas): Oracle representa la ejecución de cada instrucción SQL con un área SQL privada y otra compartida. Reconoce cuando dos usuarios están ejecutando la misma instrucción SQL y reutiliza el área compartida para dicho usuarios. Un área compartida SQL contiene un árbol proveniente del análisis (léxico, sintáctico y semántico) de la instrucción y su plan de ejecución.
+---------------
+
+Bloques de datis Oracle: Los datos en la BD son almacenados físicamente en bloques Oracle: la mínima unidad de espacio fício, la cual es un múltiplo de bloque del SO (de 2Kb a 52Kb). el tamaño del bloque Oracle se fija por el parámetro DB_BLOCK_SIZE del fichero init.ora. Un tamaño grande de bloque mejora la eficiencia del cache de E/S, pero el tamaño de la SGA aumentará para contener los mismos DB_BLOCK_BUFFERS, lo que significa un problema de memoria.
+-----------------
+
+Ejecución Select SQL: el proceso cliente pasa la sentencia SELECT SQL al proceso servidor por medio del SGA. Los procesos del servidor buscan en el área de SQL compartido una versión ejecutable de la sentencia. Si la encuentran no tienen que procesarla. Se procesa la sentencia SQL y su versión ejecutable se coloca en el área de SQL compartido en caso de no ser encontrada previamente.
+------------------
+
+Diccionario de Datos: las tablas del diccionario de datos no se pueden acceder directamente, pero se puede acceder a la información contenida en ellas a través de las vistas del diccionario de datos. Para listar las vistas de datos se puede consultar la vista DICTIONARY. Las tablas y vistas son llamadas estáticas, porque ellas cambian sólo cuando un cambio es hecho al diccionario de datos, por ejemplo, al crear una nueva tabla o autorizar algún usuario con privilegios.
+
+	* ALL_: muestra toda la información accesible al usuario actual.
+	* DBA_: muestra toda la información relecante de la base de datos entera.
+	* USER_; muestra toda la información del esquema de usuario actual.
+------------------
+
+Vistas dinámicas: estas vistas monitorean la acitivdad de la BD son mantenidas por el servidor y accesibles al usuario administrador de la base de datos SYS. ellas son actualizadas continuamente mientras que la BD esté abierta y en uso, su contenido está relacionado principalmente al desempeño. Aunque estas vistas parezcan ser tablas regulares, no lo son. Las vistas proveen datos en estructuras de disco internas y estructuras de memoria. Un usuario las puede consultar pero nunca actualizarlas o alteralas.

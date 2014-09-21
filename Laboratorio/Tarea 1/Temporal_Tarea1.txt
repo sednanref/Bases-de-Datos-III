@@ -1,0 +1,178 @@
+**RESPUESTAS TEMPORALES TAREA 1**
+
+A.1: Oracle ofrece una cantidad enorme de tablas del diccionario de datos. Se
+dividen en estáticas(solo cambian cuando cambia el diccionario de datos) y 
+dinámicas(son usadas y constantemente actualizadas por el manejador). Las tablas
+que comienzan por V$ son las dinámicas y las que comienzan por DBA son las 
+estáticas
+
+Ejemplos(Se necesitan 5):
+1.- select BUFFERS from V$BUFFER_POOL: Devuelve el número de buffers en el pool
+2.- select FILE_NAME from DBA_DATA_FILES: Devuelve el path de todos los datafiles
+3.- select CLUSTER_NAME, PCT_FREE from DBA_CLUSTERS: Devuelve el PCT_FREE de cada
+cluster, además del nombre asociado de cada uno para fácil identificación
+4.- select INDEX_NAME, INDEX_TYPE from DBA_INDEXES: Devuelve el tipo de cada
+índice en la base de datos
+5.- select NAME from V$DATABASE: Devuelve el nombre de la base de datos
+
+C.1:
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/users01.dbf'
+RESIZE 10M;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/users01.dbf'
+AUTOEXTEND OFF;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/example01.dbf'
+RESIZE 128M;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/example01.dbf'
+AUTOEXTEND OFF;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/sysaux01.dbf'
+RESIZE 512M;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/sysaux01.dbf'
+AUTOEXTEND OFF;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/system01.dbf'
+RESIZE 768M;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/system01.dbf'
+AUTOEXTEND OFF;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/undotbs01.dbf'
+RESIZE 1536M;
+
+ALTER DATABASE DATAFILE '/tablespace/fuentemagna/fuentemagna/undotbs01.dbf'
+AUTOEXTEND OFF;
+
+ALTER DATABASE TEMPFILE '/tablespace/fuentemagna/fuentemagna/temp01.dbf'
+RESIZE 1G;
+
+ALTER DATABASE TEMPFILE '/tablespace/fuentemagna/fuentemagna/temp01.dbf'
+AUTOEXTEND OFF;
+
+SELECT FILE_NAME, BYTES, AUTOEXTENSIBLE FROM DBA_DATA_FILES;
+
+SELECT FILE_NAME, BYTES, AUTOEXTENSIBLE FROM DBA_TEMP_FILES;
+
+C.2:
+
+CREATE TABLESPACE tbsautouniforme DATAFILE '/tablespace/fuentemagna/fuentemagna/tbsautouniforme.dbf'
+SIZE 100M
+EXTENT MANAGEMENT LOCAL UNIFORM // UNIFORM por defecto extiende a 1M
+SEGMENT SPACE MANAGEMENT AUTO; 
+
+D:
+
+Expresión yuca un poco más simplificada:
+
+SELECT [ALTER TABLESPACE tablespace_name
+		ADD DATAFAILE CHR(39)
+		SUBSTR(file_name,1,INSTR(file_name,´.´,1,1)-1)]
+		´automatic.dbf´  chr(39)  SIZE BYTES/1024K AUTOEXTEND
+		DECODE(autoextensible, ´YES´ , ´ON NEXT
+		INCREMENT_BY MAXSIZE MAXBYTES/1024K , ´OFF´ ));]
+FROM dba_temp_files t
+WHERE tablespace_name in (select tablespace_name
+						FROM dba_temp_files
+						GROUP BY tablespace_name
+						HAVING (sum(maxbytes-bytes)/1024)/1024<2049)
+						AND file_id=(select min(file_id)
+						FROM dba_temp_files t1
+						WHERE t.tablespace_name=t1.tablespace_name);
+
+RTRIM: elimina espacios en blanco, también puede eliminar caracteres
+especificados
+
+INSTR: encuentra la ocurrencia de un substring en un string.
+INSTR(file_name,´.´,1,1): busca en file_name un '.' desde la posición 1 y busca
+solo la primera ocurrencia. SUBSTR: retorna un substring de un string.
+SUBSTR(file_name,1,INSTR(file_name,´.´,1,1)-1): retorna el substring de
+file_name comprendido desde la posición 1 haasta la posición en la cual se
+encuentra el '.' en filename, en fin, retorna únicamente el nombre del archivo
+sin extensión alguna.
+
+output:
+
+ALTER TABLESPACE TEMP ADD DATAFILE '/tablespace/fuentemagna/fuentemagna/temp01automatic.dbf' SIZE 1048576K AUTOEXTEND OFF;
+
+E.1
+
+NOMOUNT: inicia la instancia sin montar una base de datos, esto no permite el 
+acceso a la base de datos y usualmente podría es hecho para la creación o 
+re-creación de archivos de control.
+MOUNT: inicia la instancia y monta la base de datos, pero la mantiene cerrada. 
+Este estado permite algunas actividades de la DBA, pero no permite el acceso
+general a la base de datos.
+OPEN: inicia la instancia y monta y abre la base de datos. Esto puede ser hecho
+en modo no-restringido, permitiendo el acceso a todos los usuarios, o en el
+caso del modo restringido, permitiendo el acceso para los administradores de la
+base de datos únicamente.
+
+E.2
+Desde SQL*Plus:
+STARTUP MOUNT
+ó para SRVCTL (cuando Oracle Restart está en uso):
+srvctl start database -db db_unique_name -startoption mount
+
+E.3
+
+ALTER DATABASE MOUNT;
+ALTER DATABASE OPEN;
+
+E.4
+
+NORMAL: antes de que la base de datos sea apagada, espera a todos los usuarios
+conectados en el momento se desconecten de la base de datos. Nuevas conecciones
+no son permitidas luego de que la orden ha sido efectuada.
+TRANSACTIONAL: este modo es usado para hacer un shutdown planificado de una
+instancia, permitiendo que transacciones activas sean completadas primero. 
+Al hacer un transactional shutdown:
+	- Nuevas conecciones no son permitidas, tampoco nuevas transacciones.
+	- Luego de que todas las transacciones han sido completadas, cualquier
+	  cliente aún conectado a la instancia es desconectado.
+	- Luego, el proceso de apagado es como si un SHUTDOWN INMEDIATE fuera ejecutado.
+El próximo startup de la base de datos no requerirá ningún procedimiento de
+recuperación.
+INMEDIATE: usar un inmediate shutdwon solo en las siguientes situaciones:
+	- Para iniciar un backup automático e inatendido.
+	- Cuando un corte de energía va a ocurrir pronto.
+	- Cuando la base de datos o alguna de sus aplicaciones está funcionando
+	  irregularmente y no se puede contactar a los usuarios para que se
+	  se desconecten o están incapacitados para desconectarse.
+ Al apagar la base de datos en inmediate:
+ 	- Nuevas conecciones no serán permitidas, tampoco nuevas transacciones.
+ 	- Las transacciones no confirmadas se deshacen (si alguna transacción extensa 
+ 	  existe, este método de apagado podría no completarse rápidamente a pesar
+ 	  de su nombre).
+ 	- La base de datos de Oracle no espera por los usuarios para ser desconectada
+ 	  al momento. La base de datos deshace todas las transacciones activas y
+ 	  desconecta a todos los usuarios conectados.
+El próximo startup de la base de datos no requerirá procedimientos de recuperación
+de la instancia.
+ABORT: con este modo se puede apagar la base de datos instantáneamente,
+abortando la base de datos. Este modo debe ser ejecutado únicamente en las 
+siguientes situaciones:
+	- La base de datos o alguna de sus aplicaciones está funcionando irregularmente
+	  y ninguno de los otros modos de apagado funciona.
+	- Se ve en la obligación de apagar la base de datos instantáneamente (por
+	  ejemplo, si sabe que algún corte eléctrico ocurrirá en un minuto).
+	- Presenta problemas al inicia una instancia de base de datos.
+Al realizar un shutdown en este modo:
+	- Nuevas conecciones no son permitidas, tampoco nuevas transacciones.
+	- Cualquier orden SQL procesada por la base de datos de Oracle es
+	  interrumpida en el acto.
+	- A las transacciones no confirmadas no se les hace roll back.
+	- La base de datos de Oracle no espera a que los usuario conectados se
+	  desconecten. La base de datos desconecta a todos los usuario implícitamente.
+El próximo startup de la base de datos requerirá procedimientos de recuperación
+de la instancia automáticamente.
+
+E.5
+
+El ABORT es el mecanismo de apagado menos recomendado, ya que no procede a
+realizar ningún mecanismo de seguridad previo al apagado. Lo que conlleva a
+realizar procedimientos de recuperación en la próximo inicialización de la 
+instancia, lo cual los otros métodos no necesitan hacer.
+

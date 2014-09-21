@@ -1,0 +1,62 @@
+Laboratorio de Bases de Datos
+Apuntes Clase 2:
+
+Estructuras Lógicas y Físicas: las unidades de asignación de espacio en la base de datos son los bloques de datos, extents y segmentos. el nivel más fino de granularidad en que Oracle almacena los datos es el bloque de datos (también llamados bloques lógicos, bloques de Oracle o páginas). Un bloque de datos corresponde a un número de bytes físicos de espacio de la base de datos en disco. Un segmento es un conjunto de extents, cada uno de los cuales ha sido asignado a una estructura de datos específicas, pertenecientes a un tablespace.
+
+Un tablespace puede agrupar lógicamente los datos; por ejemplo, un tablespace Contabilidad, un tablespace RRHH, entre otros. Los segmentos de un tablespace pueden ser: Datos (tablas), índice, rollback, temporales (para procesar instrucciones SQL). A medida que se actualilcen las tablas, los extents pueden aumentar o disminuir de número. Se establece un número mínimo de extents y número de extents a ser agregados. Existe siempre el tablespace SYSTEM, el cual almacena datos del diccionario.
+
+Bloque de Datos: Oracle maneja el espacio de almacenamiento en datafiles de una base de datos en unidades llamadas bloques de datos. Un bloque de datos es la unidad más pequeña de datos usada por una base de datos. Oracle solicita los datos en múltiplos de los bloques de datos de Oracle y no del sistema operativo. El tamaño estándar del bloque se puede conocer consultando el parámetro DB_BLOCK_SIZE. Los tamaños de los bloques de datos deben ser un múltiplo de los tamaños de bloques del sistema operativo, entonado para evitar I/O innecesarios. Los bloques de datos poseen distintos parámetros:
+	* PCTFREE: especifica el mínimo porcentaje de un bloque de datos para ser reservado como espacio libre para posibles actualizaciones de registros que han sido insertados en el bloque. Un PCTFREE alto permite más actualizaciones en un bloque y el bloque puede acomodar menos filas. Se debe colocar un valor alto a este parámetro cuando la tabla contiene:
+		- Columnaas que son inicialmente NULL y luego actualizadas.
+		- columnas que pueden aumentar de tamaño cuando se actualizan.
+	* PCTUSED: especifica el porcentaje mínimo de un bloque que puede ser usado para un registro más el overhead antes de que nuevos registros sean añadidos al bloque. Este se configura para que el bloque retorne la lista de libres cuando hay suficiente espacio para acomodar una tupla promedio.
+	* INITRANS y MAXTRANS: especifican el número inicial y máximo de "slots" para transacciones concurrentes que se crearán en el bloque que almacene índices o datos. Los "slots" de transacciones se utilizan para almacenar la información de las transacciones que están haciendo cambios sobre el bloque de datos en un instante dado. Una transacción puede utilizar un "slot" si está cambiando más de una fila o entrada de un índice.
+		- INITTRANS: cuyo valor por defecto es 1 para los segmentos de datos y 2 para los segmentos de índices, garantiza un mínimo nivel de concurrencia.
+		- MAXTRANS: cuyo valor por defecto es de 255, delimita el número de transacciones que pueden hacer cambios a los datos en un bloque de datos o índices.
+
+Estructura de un Bloque Oracle:
+	* Encabezado: información general del bloque, como la dirección del bloque y el tipo de segmento (datos, índices).
+	* directorio de tablas: información acerca de las tablas que contienen tuplas en el bloque.
+	* Directorio de Registros: información de las tuplas actuales en el bloque (incluyendo direcciones para cada row piece "trozo de registro" en el área de datos). Después que el espacio ha sido asignado en el directorio de registros de un bloque de datos, éste no es reclamado cuando el registro es borrado. Oracle reutiliza el espacio sólo cuando se insertan nuevos registros en el bloque.
+	* Overhead: el encabezado del bloque de datos, directorio de tablas y directorio de registros.
+	* Datos de los registros: contiene la tabla o datos de índices. Los registros pueden atravesar bloques.
+	* Espacio libre: es asignado para la inserción de nuevos registros y para la actualización de registros que requieran espacio adicional.
+
+Formato de un segmento de registro (row piece): Un bloque de datos usualmente contiene un solo row piece por cada registro. Cuando Oracle debe almacenar un registro en más de un row piece, éste es encadenado a través de múltiples bloques. Cuando una tabla tiene más de 255 columnas, los registros que tienen datos después de la columnaa 255 se encadenan pero dentro del mismo bloque (intrablock chaining). Las piezas de un registro encadenado son encadenadas usando los ROWIDs de las piezas.
+	* Row Header:
+		- Overhead: indica que comienza un row piece.
+		- Número de columnas: del row piece.
+		- Cluster Key ID (si es clustered).
+		- ROWID de partes de filas encadenadas (si hay). El ROWID identifica cada row piece por su localización o dirección. Toda fila de una tabla posee un único ROWID que permite ubicar el prime row piece de la fila. No se almacenan físicamente como una columna en la tabla. Puede ser utilizada para localizar una fila ya que indica su ubicación dentro de la abstracción física que maneja Oracle. Proveen un mecanismo de acceso más rápido para las filas de una tabla. Se utilizan en las estructuras de índices.
+	* Tamaño de la columna.
+	* Valor de la columna.
+
+Encadenamiento (chaining): la fila es demasiado larga para ser almacenada en un bloque. Oracle almacena la fila en una cadena de uno o más bloques.
+
+Migración: si un UPDATE aumenta la cantidad de espacio ocupado por la fila, de forma que la misma no pueda ser almacenada en un bloque de datos el bloque original permanece en el rowpiece con el apuntador a la nueva dirección. Oracle trata de encontrar otro bloque con suficiente espacio para almacenar la fila completa. Si el bloque existe, se mueve la fila completa. Si no, Oracle separa la fila en varios "row pieces", se mueve el(los) pedazo(s) que pueda(n) ser almacenado(s) y se realiza encadenamiento. Oracle mantiene en el bloque original de una fila migrada el apuntador a un nuevo bloque que contiene la fila actual; el ROWID de una fila migrada no cambia. Los índices no se actualizan, ellos apuntan a la localización original del registro.
+
+Manejo de extents en el tablespace:
+	* Diccionario de datos.
+	* Localmente (freelist o bitmap local).
+
+Manejo de segmentos en tablespaces manejados localmente:
+	* Manual (PCTFREE, PCTUSE, FREELIST, FREELIST GROUPS).
+	* Automática.
+
+Asignación de Extents:
+	* Manual.
+		- Initial.
+		- Next.
+		- PCTINCREASE.
+		- MINEXTENTS.
+	* Uniform.
+	* autoallocate.
+
+Manejo de datafile:
+	* Tamaño fijo.
+	* Extensibles.
+
+Manejo del espacio libre: el espacio libre en un segmento se maneja mediante el uso de bitmaps en lugar de listas. El espacio liberado por una transacción de DELETE y UPDATE puede utilizarse para nuevas instrucciones de INSERT si:
+	* La instrucción de INSERT es de la misma transacción y aparece luego de la instrucción que libera espacio, esta instrucción puede usar el espacio libre inmediatamente.
+	* La instrucción de INSERT esta en otra transacción, no pertenece a aquella que liberó el espacio, por lo que debe esperar por una instrucción de commit de aquella que libera el espacio para poder utilizarlo.
+El espacio liberado puede o no ser contiguo con el área de espacio libre en el bloque. Oracle fusiona los espacios libres sólo cuando: una instrucción de INSERT o UPDATE intenta usar un bloque que contiene suficiente espacio libre para contener un nuevo row piece y el espacio libre está fragmentado.
